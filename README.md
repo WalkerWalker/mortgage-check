@@ -3,12 +3,22 @@
 Upload one home buyer's document dossier, get a straight answer on whether they
 can have the mortgage, and the numbers behind it.
 
+**Live: https://walkerwalker.github.io/mortgage-check/**
+
 Built for Exercise 4 of the Claude Build Day, Zurich, October 2026.
 
 ```bash
 npm install
-npm run dev          # http://localhost:3000
+npm run dev           # http://localhost:3000, with the server + Claude path
+npm run build:static  # static export into out/, no server at all
 ```
+
+The deployed site is static. The whole deterministic pipeline — reading the
+PDFs, the four checks, the decision, the fixes, the credit proposal — runs in
+the browser, so **uploaded documents never leave the visitor's machine**. The
+Claude extraction path needs a key that must not ship to a browser, so it is
+available when you run a server (`npm run dev`) and absent from the static
+build.
 
 Then click one of the three sample buyers on the landing page, or drag a folder
 of PDFs onto it.

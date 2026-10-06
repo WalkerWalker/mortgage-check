@@ -170,6 +170,23 @@ export default function Page() {
             against the Swiss lending rules, and the numbers behind it.
           </p>
 
+          {STATIC && (
+            <p className="mt-4 flex items-start gap-2 text-[13px] leading-relaxed text-ink-2">
+              <span
+                aria-hidden
+                className="mt-[3px] flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full text-[9px] leading-none font-bold text-white"
+                style={{ background: "var(--color-good)" }}
+              >
+                ✓
+              </span>
+              <span>
+                Your documents are read <strong className="font-medium text-ink">in
+                this browser</strong> and are never uploaded. Nothing you add here
+                leaves your computer.
+              </span>
+            </p>
+          )}
+
           <div className="mt-9">
             <Dropzone
               onFiles={onFiles}

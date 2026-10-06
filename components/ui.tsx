@@ -24,7 +24,7 @@ export function Section({
   return (
     <section className="border-t border-line pt-6">
       <div className="mb-4">
-        <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
+        <h2 className="display text-[22px] text-ink">{title}</h2>
         {note && <p className="mt-0.5 text-[13px] text-ink-2">{note}</p>}
       </div>
       {children}

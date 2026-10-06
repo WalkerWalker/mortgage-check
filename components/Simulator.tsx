@@ -53,11 +53,11 @@ export function Simulator({
   const step = 5_000;
 
   return (
-    <div className="rounded-xl border border-line bg-surface p-5 sm:p-6">
+    <div className="rounded-2xl border border-line bg-surface p-5 sm:p-7 lift">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <h2 className="text-[15px] font-semibold text-ink">Try other numbers</h2>
-          <p className="mt-0.5 text-[13px] text-ink-2">
+          <h2 className="display text-[22px] text-ink">Try other numbers</h2>
+          <p className="mt-1 text-[13px] text-ink-2">
             Move a slider to see what it would take.
           </p>
         </div>
@@ -77,21 +77,30 @@ export function Simulator({
       </div>
 
       {/* The verdict for whatever is currently on the dials. */}
-      <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg bg-canvas px-4 py-3">
+      <div className="mt-5 rounded-xl bg-canvas px-4 py-3.5">
         <StatusChip status={a.passed ? "pass" : "fail"}>
           {a.passed ? "This works" : "Does not pass"}
         </StatusChip>
-        <span className="text-[13px] text-ink-2">
-          Mortgage <span className="tnum font-semibold text-ink">CHF {fmt(mortgage)}</span>
-          {" · "}
-          <span className="tnum font-semibold text-ink">
-            CHF {fmt(a.totalYearlyCost / 12)}
-          </span>{" "}
-          a month
-          {" · "}
-          costs <span className="tnum font-semibold text-ink">{pct(a.costRatio)}</span> of
-          income
-        </span>
+        <dl className="mt-2.5 grid grid-cols-3 gap-3">
+          <div>
+            <dt className="text-[11px] text-ink-3">Mortgage</dt>
+            <dd className="tnum text-[16px] font-semibold text-ink">
+              {fmt(mortgage)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[11px] text-ink-3">Per month</dt>
+            <dd className="tnum text-[16px] font-semibold text-ink">
+              {fmt(a.totalYearlyCost / 12)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-[11px] text-ink-3">Of your income</dt>
+            <dd className="tnum text-[16px] font-semibold text-ink">
+              {pct(a.costRatio)}
+            </dd>
+          </div>
+        </dl>
       </div>
 
       {/* Where the money comes from. */}
@@ -303,7 +312,10 @@ function Slider({
           value={value}
           disabled={disabled}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full accent-[var(--color-accent)]"
+          /* The track gradient has no selector for the filled portion, so the
+             component hands it the position as a custom property. */
+          style={{ "--fill": `${pctAt(value)}%` } as React.CSSProperties}
+          className="w-full"
           aria-label={label}
         />
         {/* Markers sit under the track: the documented figure, and any rule floor. */}

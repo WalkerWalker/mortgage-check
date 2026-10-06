@@ -128,15 +128,20 @@ export default function Page() {
     return (
       <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-6 py-16">
         <div>
-          <h1 className="text-[32px] leading-tight font-semibold tracking-tight text-ink">
-            Can you get this mortgage?
+          <p className="text-[11px] font-medium tracking-[0.14em] text-ink-3 uppercase">
+            Swiss mortgage check
+          </p>
+          <h1 className="display mt-3 text-[44px] text-ink sm:text-[52px]">
+            Can you get
+            <br />
+            this mortgage?
           </h1>
-          <p className="mt-3 text-[15px] leading-relaxed text-ink-2">
+          <p className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-2">
             Upload the documents your bank asks for. You will get a straight answer
             against the Swiss lending rules, and the numbers behind it.
           </p>
 
-          <div className="mt-8">
+          <div className="mt-9">
             <Dropzone
               onFiles={onFiles}
               onSample={onSample}
@@ -146,26 +151,13 @@ export default function Page() {
           </div>
 
           {error && (
-            <div role="alert" className="mt-6 rounded-lg bg-canvas px-4 py-3">
-              <p className="text-[13px] font-medium text-ink">
-                That did not work
-              </p>
+            <div
+              role="alert"
+              className="mt-6 rounded-xl border border-line bg-surface px-4 py-3"
+            >
+              <p className="text-[13px] font-medium text-ink">That did not work</p>
               <p className="mt-0.5 text-[13px] text-ink-2">{error}</p>
             </div>
-          )}
-
-          {!busy && !error && (
-            <Disclosure summary="Which documents?" hint="seven">
-              <ul className="space-y-1.5 text-[13px] text-ink-2">
-                <li>The mortgage application form (Hypothekarantrag)</li>
-                <li>Your salary certificate (Lohnausweis)</li>
-                <li>Your tax return summary (Steuererklärung)</li>
-                <li>A debt register extract (Betreibungsregisterauszug)</li>
-                <li>Your pension fund statement (Vorsorgeausweis)</li>
-                <li>A bank statement of your assets (Vermögensausweis)</li>
-                <li>The property sales documentation (Verkaufsdokumentation)</li>
-              </ul>
-            </Disclosure>
           )}
         </div>
       </main>
@@ -320,21 +312,20 @@ function Verdict({ result }: { result: AnalysisResult }) {
 
   return (
     <div>
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-2.5">
         <span
           aria-hidden
-          className="mt-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[15px] font-bold text-white"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
           style={{ background: colour }}
         >
           {icon}
         </span>
-        <div className="min-w-0">
-          <h1 className="text-[28px] leading-tight font-semibold tracking-tight text-ink">
-            {headline}
-          </h1>
-          <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{detail}</p>
-        </div>
+        <span className="text-[11px] font-medium tracking-[0.14em] text-ink-3 uppercase">
+          {result.extracted.applicantName || "Your application"}
+        </span>
       </div>
+      <h1 className="display mt-3 text-[40px] text-ink sm:text-[46px]">{headline}</h1>
+      <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-ink-2">{detail}</p>
     </div>
   );
 }

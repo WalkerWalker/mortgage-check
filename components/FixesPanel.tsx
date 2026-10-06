@@ -22,10 +22,8 @@ export function FixesPanel({ fixes }: { fixes: Fix[] }) {
 
   return (
     <section>
-      <h2 className="text-[15px] font-semibold text-ink">
-        Any one of these would work
-      </h2>
-      <p className="mt-0.5 text-[13px] text-ink-2">
+      <h2 className="display text-[22px] text-ink">Any one of these would work</h2>
+      <p className="mt-1 text-[13px] text-ink-2">
         Each option is checked against the rules before being suggested.
       </p>
 
@@ -33,7 +31,7 @@ export function FixesPanel({ fixes }: { fixes: Fix[] }) {
         {fixes.map((f) => (
           <li
             key={f.kind}
-            className="flex gap-3.5 rounded-lg border border-line bg-surface px-4 py-3.5"
+            className="flex gap-3.5 rounded-xl border border-line bg-surface px-4 py-3.5 transition lift hover:border-ink-3"
           >
             <span
               aria-hidden

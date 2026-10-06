@@ -15,10 +15,14 @@ of PDFs onto it.
 
 ## What it does
 
-The buyer uploads the seven documents a Swiss bank asks for. Claude reads them,
-the bank's rule sheet decides, and the page answers in one line — **"Yes, this
-mortgage works"** or **"Not yet"** — followed by a dial the buyer can move to
-find out what it would take.
+The buyer uploads the seven documents a Swiss bank asks for, ticked off a
+checklist as they arrive. Claude reads them, the bank's rule sheet decides, and
+the page answers in one line — **"Yes, this mortgage works"** or **"Not yet"** —
+followed by a dial the buyer can move to find out what it would take.
+
+The checklist runs the completeness check in the browser *before* anything is
+sent, so a buyer discovers they are missing their pension statement while they
+can still go and fetch it.
 
 | Stage | What happens | Who does it |
 |---|---|---|

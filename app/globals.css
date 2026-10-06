@@ -3,17 +3,23 @@
 /*
  * Status colors are the validated fixed status palette: good / warning /
  * serious / critical. They are used only as marks — a chip, a dot, a meter
- * fill. Labels and figures stay in ink, because `good` and `warning` sit below
- * 4.5:1 on a light surface and must never carry meaning on their own. Every
+ * fill. Labels and figures stay in ink, because `good` sits at 3.27:1 on a
+ * light surface and green/red are only 4.1 ΔE apart under deuteranopia. Every
  * status in the UI is therefore colour plus an icon plus a word.
  */
 @theme {
-  --color-surface: #fcfcfb;
-  --color-canvas: #f3f3f1;
-  --color-ink: #0b0b0b;
-  --color-ink-2: #52514e;
-  --color-ink-3: #7c7b76;
-  --color-line: #e2e2dd;
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-serif), ui-serif, Georgia, serif;
+
+  /* Warm paper, not blue-grey. */
+  --color-surface: #ffffff;
+  --color-canvas: #f7f6f3;
+  --color-sunken: #f1efea;
+  --color-ink: #17150f;
+  --color-ink-2: #5a564c;
+  --color-ink-3: #8a8578;
+  --color-line: #e4e1d9;
+  --color-line-2: #efece5;
 
   --color-good: #0ca30c;
   --color-warning: #fab219;
@@ -21,11 +27,11 @@
   --color-critical: #d03b3b;
 
   /* Meter tracks: the same hue as the fill, stepped light. */
-  --color-good-track: #d8efd8;
-  --color-critical-track: #f6dada;
+  --color-good-track: #dcefdc;
+  --color-critical-track: #f7dcdc;
 
-  --color-accent: #2a78d6;
-  --color-accent-soft: #eaf1fb;
+  --color-accent: #1f4e9c;
+  --color-accent-soft: #eef2f9;
 
   /*
    * The financing split is three parts of one whole — your cash, your pension
@@ -35,22 +41,24 @@
    */
   --color-own: #1f4e9c;
   --color-pension: #7ba5db;
-  --color-bank: #dbe5f3;
+  --color-bank: #dde4ef;
 }
 
 html {
   background: var(--color-canvas);
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* Figures must line up in columns, so they get tabular numerals. */
 .tnum {
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 .mono {
@@ -58,7 +66,117 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Hairline rules, one shade off the surface. Never dashed. */
-.rule {
-  border-color: var(--color-line);
+/* The display face runs large and tight; at small sizes it reads as a mistake. */
+.display {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.08;
+}
+
+/* A card lift so faint it reads as paper rather than as a shadow. */
+.lift {
+  box-shadow:
+    0 1px 2px rgb(23 21 15 / 0.04),
+    0 1px 1px rgb(23 21 15 / 0.02);
+}
+
+.lift-lg {
+  box-shadow:
+    0 1px 3px rgb(23 21 15 / 0.05),
+    0 8px 24px -12px rgb(23 21 15 / 0.1);
+}
+
+/* ------------------------------------------------------------------ sliders */
+/*
+ * The default range input renders a thick browser-blue track that fights every
+ * other colour on the page. Track and thumb are restyled per engine; the fill
+ * to the left of the thumb is painted by a gradient the component sets through
+ * --fill, since CSS has no selector for it.
+ */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  background: transparent;
+  cursor: grab;
+}
+
+input[type="range"]:active {
+  cursor: grabbing;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) 0%,
+    var(--color-accent) var(--fill, 0%),
+    var(--color-line) var(--fill, 0%),
+    var(--color-line) 100%
+  );
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-line);
+}
+
+input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -6px;
+  height: 16px;
+  width: 16px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--color-line);
+  box-shadow:
+    0 1px 2px rgb(23 21 15 / 0.16),
+    0 0 0 1px rgb(23 21 15 / 0.02);
+  transition: transform 120ms ease;
+}
+
+input[type="range"]::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--color-line);
+  box-shadow: 0 1px 2px rgb(23 21 15 / 0.16);
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.1);
+}
+
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+input[type="range"]:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ------------------------------------------------------------- disclosures */
+summary::-webkit-details-marker {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

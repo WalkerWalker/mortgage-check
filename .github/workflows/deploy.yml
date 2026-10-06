@@ -1,0 +1,65 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The engine and the PDF parser are what the static site actually runs,
+      # so a broken one should stop the deploy rather than ship.
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run check
+
+      # Route handlers cannot exist without a server. The static build runs the
+      # whole deterministic pipeline in the browser instead, so the API routes
+      # are simply dropped from this throwaway checkout.
+      - name: Remove server routes
+        run: rm -rf app/api
+
+      - name: Build static site
+        env:
+          STATIC_EXPORT: "1"
+          BASE_PATH: /mortgage-check
+        run: npx next build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -13,7 +13,8 @@ import {
   toRuleInput,
   type UploadedFile,
 } from "./extract";
-import { draftFromTemplate, draftWithClaude } from "./kreditantrag";
+import { draftWithClaude } from "./kreditantrag";
+import { draftFromTemplate } from "./kreditantrag-template";
 import { assess, proposeFixes } from "./rules";
 import type { AnalysisResult, ExtractedDossier } from "./types";
 

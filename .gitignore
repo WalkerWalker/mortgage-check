@@ -9,3 +9,6 @@ build/
 next-env.d.ts
 .DS_Store
 .claude/worktrees/
+
+# Static export output
+out/

@@ -14,9 +14,10 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { classifyFilename } from "./documents";
 import { assertPlausible, shape, type FlatExtraction } from "./shape";
-import type { DocumentKey, ExtractedDossier, RuleInput } from "./types";
+import type { DocumentKey, ExtractedDossier } from "./types";
 
 export { classifyFilename };
+export { toRuleInput } from "./rule-input";
 export { extractWithPatterns } from "./fallback";
 export type { UploadedFile } from "./fallback";
 
@@ -24,44 +25,6 @@ import type { UploadedFile } from "./fallback";
 
 /** Opus 5.5 reads the seven PDFs natively; no PDF parsing library involved. */
 const MODEL = "claude-opus-5-5";
-
-// ---------------------------------------------------------------------------
-// Mapping an extraction onto the rule engine's inputs
-// ---------------------------------------------------------------------------
-
-/**
- * Choose, for each rule input, which document wins when they disagree.
- *
- * These choices are the substance of the credit check, so they are stated
- * explicitly rather than buried:
- *
- *   income  the employer's Lohnausweis, never the applicant's own claim. An
- *           expected bonus is not documented income.
- *   equity  the bank's own statement of assets, not the figure on the form.
- *   pension the pension fund's record of the withdrawal, capped at what the
- *           fund says is actually available.
- *   price   the higher of application and sales documentation, which is the
- *           conservative reading of the bank's exposure.
- */
-export function toRuleInput(d: ExtractedDossier): RuleInput {
-  const purchasePrice = Math.max(
-    d.property.priceOnApplication.value,
-    d.property.priceOnSalesDoc.value,
-  );
-
-  const pensionEquity = Math.min(
-    d.pension.wefRequested.value,
-    d.pension.maxWefAvailable.value,
-  );
-
-  return {
-    purchasePrice,
-    bankValuation: d.property.bankValuation?.value,
-    grossIncome: d.income.grossOnLohnausweis.value,
-    hardEquity: d.equity.totalOnBankStatement.value,
-    pensionEquity,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Claude extraction

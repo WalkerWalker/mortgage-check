@@ -9,7 +9,9 @@
     "test": "tsx lib/rules.test.ts && tsx lib/extraction.test.ts",
     "test:rules": "tsx lib/rules.test.ts",
     "test:extraction": "tsx lib/extraction.test.ts",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "build:static": "STATIC_EXPORT=1 next build",
+    "serve:static": "npx --yes serve@14 out -l 4300"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",

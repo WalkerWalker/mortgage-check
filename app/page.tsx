@@ -23,8 +23,22 @@ import { FixesPanel } from "@/components/FixesPanel";
 import { KreditantragView } from "@/components/KreditantragView";
 import { Simulator } from "@/components/Simulator";
 import { Disclosure, Section } from "@/components/ui";
+import {
+  analyzeInBrowser,
+  analyzeSampleInBrowser,
+  SAMPLE_FILES,
+  SAMPLE_FOLDERS,
+} from "@/lib/client-analyze";
+import { assessCore } from "@/lib/analyze-core";
 import { fmt, pct } from "@/lib/rules";
 import type { AnalysisResult, ExtractedDossier, RuleInput } from "@/lib/types";
+
+/**
+ * On the static build there is no server, so the browser runs the whole
+ * deterministic pipeline itself and nothing is uploaded anywhere.
+ */
+const STATIC = process.env.NEXT_PUBLIC_STATIC === "1";
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 export default function Page() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -33,82 +47,97 @@ export default function Page() {
   const [stage, setStage] = useState<string | null>(null);
   const [signedOff, setSignedOff] = useState<"approved" | "rejected" | null>(null);
 
-  const run = useCallback(async (fn: () => Promise<Response>, stageLabel: string) => {
-    setBusy(true);
-    setStage(stageLabel);
-    setError(null);
-    try {
-      const response = await fn();
-      const data = (await response.json()) as AnalysisResult | { error: string };
-      if (!response.ok || "error" in data) {
-        setError("error" in data ? data.error : "The check could not be completed.");
-        return;
+  /** Run a step that produces a result, whether locally or on the server. */
+  const run = useCallback(
+    async (fn: () => Promise<AnalysisResult>, stageLabel: string) => {
+      setBusy(true);
+      setStage(stageLabel);
+      setError(null);
+      try {
+        setResult(await fn());
+        setSignedOff(null);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "The check could not be completed.",
+        );
+      } finally {
+        setBusy(false);
+        setStage(null);
       }
-      setResult(data);
-      setSignedOff(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "The check could not be completed.");
-    } finally {
-      setBusy(false);
-      setStage(null);
+    },
+    [],
+  );
+
+  /** POST to a server route, unwrapping its error shape. */
+  const post = useCallback(async (url: string, body: BodyInit, json: boolean) => {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: json ? { "Content-Type": "application/json" } : undefined,
+      body,
+    });
+    const data = (await response.json()) as AnalysisResult | { error: string };
+    if (!response.ok || "error" in data) {
+      throw new Error(
+        "error" in data ? data.error : "The check could not be completed.",
+      );
     }
+    return data;
   }, []);
 
   const onFiles = useCallback(
     (files: File[]) => {
-      const body = new FormData();
-      for (const f of files) body.append("files", f);
-      void run(
-        () => fetch("/api/analyze", { method: "POST", body }),
-        `Reading your ${files.length} documents…`,
-      );
+      void run(() => {
+        if (STATIC) return analyzeInBrowser(files);
+        const body = new FormData();
+        for (const f of files) body.append("files", f);
+        return post("/api/analyze", body, false);
+      }, `Reading your ${files.length} documents…`);
     },
-    [run],
+    [run, post],
   );
 
   const onSample = useCallback(
     (id: string) => {
-      void run(
-        () =>
-          fetch("/api/sample", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id }),
-          }),
-        "Reading the documents…",
-      );
+      void run(() => {
+        if (STATIC) {
+          return analyzeSampleInBrowser(SAMPLE_FOLDERS[id], SAMPLE_FILES, BASE_PATH);
+        }
+        return post("/api/sample", JSON.stringify({ id }), true);
+      }, "Reading the documents…");
     },
-    [run],
+    [run, post],
   );
 
   const onEdit = useCallback(
     (field: EditableField, value: number) => {
       if (!result) return;
+      const edited = applyEdit(result.extracted, field, value);
+      // Re-running the arithmetic needs no server and no API call either way.
       void run(
         () =>
-          fetch("/api/reassess", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ extracted: applyEdit(result.extracted, field, value) }),
-          }),
+          STATIC
+            ? Promise.resolve(assessCore(edited))
+            : post("/api/reassess", JSON.stringify({ extracted: edited }), true),
         "Recalculating…",
       );
     },
-    [result, run],
+    [result, run, post],
   );
 
+  // Redrafting is the one action that genuinely needs the API, so it is only
+  // offered where a server exists to hold the key.
   const onRedraft = useCallback(() => {
-    if (!result) return;
+    if (!result || STATIC) return;
     void run(
       () =>
-        fetch("/api/reassess", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ extracted: result.extracted, redraft: true }),
-        }),
+        post(
+          "/api/reassess",
+          JSON.stringify({ extracted: result.extracted, redraft: true }),
+          true,
+        ),
       "Writing the credit proposal…",
     );
-  }, [result, run]);
+  }, [result, run, post]);
 
   const documented: RuleInput | null = useMemo(() => {
     if (!result) return null;
@@ -234,7 +263,7 @@ export default function Page() {
               <KreditantragView
                 markdown={result.kreditantrag}
                 engine={result.draftEngine}
-                onRedraft={onRedraft}
+                onRedraft={STATIC ? undefined : onRedraft}
                 busy={busy}
               />
             </div>

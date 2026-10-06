@@ -13,12 +13,31 @@ npm run dev           # http://localhost:3000, with the server + Claude path
 npm run build:static  # static export into out/, no server at all
 ```
 
-The deployed site is static. The whole deterministic pipeline — reading the
-PDFs, the four checks, the decision, the fixes, the credit proposal — runs in
-the browser, so **uploaded documents never leave the visitor's machine**. The
-Claude extraction path needs a key that must not ship to a browser, so it is
-available when you run a server (`npm run dev`) and absent from the static
-build.
+**Nothing is uploaded by default, anywhere.** The whole deterministic pipeline —
+reading the PDFs, the four checks, the decision, the fixes, the credit proposal
+— runs in the browser, locally and on the deployed site alike.
+
+Reading with Claude is opt-in. It is offered only where a server holds an API
+key (`npm run dev` with `.env.local` set), because a key cannot ship to a
+browser; tick the box and the page says plainly that the documents will be sent.
+Either way the decision is the same arithmetic — the model only reads.
+
+### What the two readers are actually for
+
+|  | Reads PDFs with | Needs | Handles |
+|---|---|---|---|
+| Default | pattern matching | nothing | these uniform PDFs |
+| Opt-in | Claude | server + key | any layout, scans, unfamiliar wording |
+
+The pattern reader works because these documents are machine-generated and
+uniform. It tolerates a lot — any visual layout, values on the next line,
+apostrophe/comma/space thousands separators, missing decimals, a sentence
+between label and value — because `unpdf` flattens the PDF to text and the
+patterns work on that. What it cannot survive is different *wording*
+(`Erwerbspreis` for `Kaufpreis`), a value printed before its label, or a scan
+with no text layer. In those cases it returns nothing and `assertPlausible`
+refuses, rather than guessing. `scripts/probe-robustness.mts` prints the whole
+survival table.
 
 Then click one of the three sample buyers on the landing page, or drag a folder
 of PDFs onto it.

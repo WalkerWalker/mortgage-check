@@ -9,7 +9,7 @@
  * document findings, the Kreditantrag — folded away for whoever needs it.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArithmeticDisclosure,
   ChecksSummary,
@@ -34,8 +34,9 @@ import { fmt, pct } from "@/lib/rules";
 import type { AnalysisResult, ExtractedDossier, RuleInput } from "@/lib/types";
 
 /**
- * On the static build there is no server, so the browser runs the whole
- * deterministic pipeline itself and nothing is uploaded anywhere.
+ * The browser runs the whole deterministic pipeline everywhere, static build or
+ * not, so that the local app and the public site behave identically and no
+ * document is uploaded unless the reader explicitly asks for an AI read.
  */
 const STATIC = process.env.NEXT_PUBLIC_STATIC === "1";
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -46,6 +47,32 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<string | null>(null);
   const [signedOff, setSignedOff] = useState<"approved" | "rejected" | null>(null);
+
+  /**
+   * Whether an AI read can be offered, and whether the reader wants one.
+   *
+   * Off by default everywhere. Reading with Claude means sending the documents
+   * to a server, so it is something the reader turns on deliberately rather
+   * than the default they have to notice and turn off.
+   */
+  const [claudeAvailable, setClaudeAvailable] = useState(false);
+  const [useClaude, setUseClaude] = useState(false);
+
+  useEffect(() => {
+    if (STATIC) return;
+    let cancelled = false;
+    void fetch("/api/status")
+      .then((r) => (r.ok ? r.json() : { claudeAvailable: false }))
+      .then((d: { claudeAvailable?: boolean }) => {
+        if (!cancelled) setClaudeAvailable(Boolean(d.claudeAvailable));
+      })
+      .catch(() => {
+        /* No server, or no key. Either way the AI read is not on offer. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   /** Run a step that produces a result, whether locally or on the server. */
   const run = useCallback(
@@ -84,50 +111,54 @@ export default function Page() {
     return data;
   }, []);
 
+  // The AI read is the only path that leaves the machine, and only when asked.
+  const viaClaude = claudeAvailable && useClaude;
+
   const onFiles = useCallback(
     (files: File[]) => {
-      void run(() => {
-        if (STATIC) return analyzeInBrowser(files);
-        const body = new FormData();
-        for (const f of files) body.append("files", f);
-        return post("/api/analyze", body, false);
-      }, `Reading your ${files.length} documents…`);
+      void run(
+        () => {
+          if (!viaClaude) return analyzeInBrowser(files);
+          const body = new FormData();
+          for (const f of files) body.append("files", f);
+          return post("/api/analyze", body, false);
+        },
+        viaClaude
+          ? `Claude is reading your ${files.length} documents…`
+          : `Reading your ${files.length} documents…`,
+      );
     },
-    [run, post],
+    [run, post, viaClaude],
   );
 
   const onSample = useCallback(
     (id: string) => {
-      void run(() => {
-        if (STATIC) {
-          return analyzeSampleInBrowser(SAMPLE_FOLDERS[id], SAMPLE_FILES, BASE_PATH);
-        }
-        return post("/api/sample", JSON.stringify({ id }), true);
-      }, "Reading the documents…");
+      void run(
+        () =>
+          viaClaude
+            ? post("/api/sample", JSON.stringify({ id }), true)
+            : analyzeSampleInBrowser(SAMPLE_FOLDERS[id], SAMPLE_FILES, BASE_PATH),
+        viaClaude ? "Claude is reading the documents…" : "Reading the documents…",
+      );
     },
-    [run, post],
+    [run, post, viaClaude],
   );
 
+  // Re-running the arithmetic after a correction never needs a server: the rule
+  // engine is pure, so it runs in the browser whichever engine did the reading.
   const onEdit = useCallback(
     (field: EditableField, value: number) => {
       if (!result) return;
       const edited = applyEdit(result.extracted, field, value);
-      // Re-running the arithmetic needs no server and no API call either way.
-      void run(
-        () =>
-          STATIC
-            ? Promise.resolve(assessCore(edited))
-            : post("/api/reassess", JSON.stringify({ extracted: edited }), true),
-        "Recalculating…",
-      );
+      void run(() => Promise.resolve(assessCore(edited)), "Recalculating…");
     },
-    [result, run, post],
+    [result, run],
   );
 
   // Redrafting is the one action that genuinely needs the API, so it is only
   // offered where a server exists to hold the key.
   const onRedraft = useCallback(() => {
-    if (!result || STATIC) return;
+    if (!result || !claudeAvailable) return;
     void run(
       () =>
         post(
@@ -137,7 +168,7 @@ export default function Page() {
         ),
       "Writing the credit proposal…",
     );
-  }, [result, run, post]);
+  }, [result, run, post, claudeAvailable]);
 
   const documented: RuleInput | null = useMemo(() => {
     if (!result) return null;
@@ -170,21 +201,50 @@ export default function Page() {
             against the Swiss lending rules, and the numbers behind it.
           </p>
 
-          {STATIC && (
-            <p className="mt-4 flex items-start gap-2 text-[13px] leading-relaxed text-ink-2">
-              <span
-                aria-hidden
-                className="mt-[3px] flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full text-[9px] leading-none font-bold text-white"
-                style={{ background: "var(--color-good)" }}
-              >
-                ✓
+          <p className="mt-4 flex items-start gap-2 text-[13px] leading-relaxed text-ink-2">
+            <span
+              aria-hidden
+              className="mt-[3px] flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full text-[9px] leading-none font-bold text-white"
+              style={{ background: viaClaude ? "var(--color-warning)" : "var(--color-good)" }}
+            >
+              {viaClaude ? "!" : "✓"}
+            </span>
+            <span>
+              {viaClaude ? (
+                <>
+                  Your documents will be{" "}
+                  <strong className="font-medium text-ink">sent to the Anthropic
+                  API</strong> to be read. Turn this off below to keep them on your
+                  computer.
+                </>
+              ) : (
+                <>
+                  Your documents are read{" "}
+                  <strong className="font-medium text-ink">in this browser</strong> and
+                  are never uploaded. Nothing you add here leaves your computer.
+                </>
+              )}
+            </span>
+          </p>
+
+          {/* Shown only where a server holds a key, so it cannot promise
+              something the deployment cannot deliver. */}
+          {claudeAvailable && (
+            <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-xl border border-line bg-surface px-4 py-3">
+              <input
+                type="checkbox"
+                checked={useClaude}
+                onChange={(e) => setUseClaude(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent)]"
+              />
+              <span className="text-[13px] leading-relaxed text-ink-2">
+                <span className="font-medium text-ink">Read the documents with Claude</span>{" "}
+                instead of pattern matching. Handles any layout, including scans, and
+                reports the printed label each figure came from — but the documents
+                leave your computer. The decision itself is the same arithmetic either
+                way.
               </span>
-              <span>
-                Your documents are read <strong className="font-medium text-ink">in
-                this browser</strong> and are never uploaded. Nothing you add here
-                leaves your computer.
-              </span>
-            </p>
+            </label>
           )}
 
           <div className="mt-9">
@@ -216,6 +276,25 @@ export default function Page() {
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
+      {/* Asked for an AI read and did not get one. The server falls back rather
+          than failing, which is right, but it must not pass unmentioned. */}
+      {viaClaude && result.extracted.engine === "pattern-fallback" && (
+        <p className="mb-6 flex items-start gap-2 rounded-xl border border-line bg-surface px-4 py-3 text-[13px] leading-relaxed text-ink-2">
+          <span
+            aria-hidden
+            className="mt-[3px] flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full text-[9px] leading-none font-bold text-white"
+            style={{ background: "var(--color-warning)" }}
+          >
+            !
+          </span>
+          <span>
+            Claude could not read these documents, so they were read by pattern
+            matching instead. The figures below come from that read — check them
+            against your documents before relying on them.
+          </span>
+        </p>
+      )}
+
       <Verdict result={result} />
 
       {documented && (
@@ -280,7 +359,7 @@ export default function Page() {
               <KreditantragView
                 markdown={result.kreditantrag}
                 engine={result.draftEngine}
-                onRedraft={STATIC ? undefined : onRedraft}
+                onRedraft={claudeAvailable ? onRedraft : undefined}
                 busy={busy}
               />
             </div>

@@ -22,33 +22,54 @@ export interface UploadedFile {
   bytes: Uint8Array;
 }
 
-/** A Swiss amount: 165'000.00, 165’000.00 or 141'267 -> a number. */
+/** An amount: 165'000.00, 165’000.00, 165 000.00, 165,000.00 or 141'267. */
 function amount(raw: string): number {
-  const n = Number.parseFloat(raw.replace(/['’\s]/g, ""));
+  const n = Number.parseFloat(raw.replace(/['’,\s]/g, ""));
   return Number.isFinite(n) ? n : 0;
 }
 
-const NUMBER = String.raw`(\d[\d'’]*(?:\.\d{1,2})?)`;
+/**
+ * A money-shaped number.
+ *
+ * Thousands may be grouped by apostrophe, comma or space — Swiss documents use
+ * the apostrophe, but accepting the others matters because a pattern that
+ * matches only the first group returns 900 for "900 000.00", which is a
+ * thousandfold error that no later check would catch. Groups must be exactly
+ * three digits, so a date like "14. März" cannot pass as an amount.
+ */
+const NUMBER = String.raw`(\d{1,3}(?:['’,  ]\d{3})+(?:\.\d{1,2})?|\d+\.\d{1,2}|\d+)`;
+
+/** The same, minus the bare-integer case, for use without a currency anchor. */
+const MONEY_SHAPED = String.raw`(\d{1,3}(?:['’,  ]\d{3})+(?:\.\d{1,2})?|\d+\.\d{1,2})`;
 
 /**
  * The first amount after a label.
  *
- * Anchoring on the "CHF" that precedes every amount in these documents, rather
- * than on the next run of digits, because some labels carry a date of their own
- * — "Altersguthaben per 01.01.2026 CHF 310'500.00" would otherwise yield 1.01.
- * The lazy quantifier stops at the field's own CHF, not a later one. Falling
- * back to the first digits covers any amount printed without the currency.
+ * Anchored on the "CHF" that precedes every amount in these documents rather
+ * than on the next run of digits, because labels carry dates of their own:
+ * "Altersguthaben per 01.01.2026 CHF 310'500.00" would otherwise yield 1.01.
+ * The lazy quantifier stops at the field's own CHF, not a later one, and the
+ * window is wide enough to clear a sentence of prose between the two.
+ *
+ * Without a currency marker the only safe fallback is a money-shaped number
+ * within a short reach, because the looser alternative — the next digits at any
+ * distance — reads the day out of a date and reports it as francs. A miss here
+ * returns null and `assertPlausible` turns that into a refusal, which is the
+ * outcome to want: no answer beats a confident wrong one.
  */
-function after(text: string, label: RegExp): number | null {
+export function after(text: string, label: RegExp): number | null {
   // Compiled multiline so a label written as /^Total/ anchors to the start of
   // its line rather than the start of the whole document.
   const withCurrency = new RegExp(
-    label.source + String.raw`[\s\S]{0,60}?CHF\s*` + NUMBER,
+    label.source + String.raw`[\s\S]{0,200}?CHF\s*` + NUMBER,
     "im",
   ).exec(text);
   if (withCurrency) return amount(withCurrency[1]);
 
-  const plain = new RegExp(label.source + String.raw`[^\d]{0,60}?` + NUMBER, "im").exec(text);
+  const plain = new RegExp(
+    label.source + String.raw`[^\d]{0,40}?` + MONEY_SHAPED,
+    "im",
+  ).exec(text);
   return plain ? amount(plain[1]) : null;
 }
 

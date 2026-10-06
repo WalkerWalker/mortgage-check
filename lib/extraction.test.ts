@@ -17,7 +17,7 @@ import { consistencyFindings } from "./consistency";
 import { assess } from "./rules";
 import { SAMPLE_DOSSIERS, type SampleKey } from "./samples";
 import type { ExtractedDossier } from "./types";
-import type { UploadedFile as Upload } from "./fallback";
+import { after, type UploadedFile as Upload } from "./fallback";
 
 const FOLDERS: Record<SampleKey, string> = {
   A1: "A1_Thomas_Meier",
@@ -204,6 +204,53 @@ console.log(`\nRefusing an unreadable dossier`);
   test("throws on a dossier it cannot read", () => {
     assert.equal(threw, true);
   });
+}
+
+// ---------------------------------------------------------------------------
+console.log(`\nAmount matching — never silently wrong`);
+// ---------------------------------------------------------------------------
+{
+  // A miss is recoverable: assertPlausible turns it into a refusal. A wrong
+  // number is not, because every check downstream trusts it. These cases all
+  // once returned a plausible-looking wrong value, so they are pinned.
+  const WANT = 900_000;
+  const mustMatch: [string, string][] = [
+    ["apostrophe grouping, as printed", "Kaufpreis CHF 900'000.00"],
+    ["curly apostrophe", "Kaufpreis CHF 900’000.00"],
+    ["space grouping", "Kaufpreis CHF 900 000.00"],
+    ["comma grouping", "Kaufpreis CHF 900,000.00"],
+    ["no decimals", "Kaufpreis CHF 900'000"],
+    ["no currency marker", "Kaufpreis 900'000.00"],
+    ["value on the next line", "Kaufpreis\nCHF 900'000.00"],
+    ["a note between label and value", "Kaufpreis\n(gemäss Vertrag)\nCHF 900'000.00"],
+    [
+      "a sentence between label and value",
+      "Kaufpreis gemäss dem am 14. März unterzeichneten Kaufvertrag zwischen den Parteien CHF 900'000.00",
+    ],
+  ];
+
+  for (const [what, text] of mustMatch) {
+    test(`reads 900,000 from: ${what}`, () => {
+      assert.equal(after(text, /Kaufpreis/), WANT);
+    });
+  }
+
+  // A date must never be mistaken for an amount.
+  test("does not read a date as an amount", () => {
+    assert.equal(after("Altersguthaben per 01.01.2026 CHF 310'500.00", /Altersguthaben/), 310_500);
+  });
+
+  // Where the label is absent the answer must be null, not a guess.
+  const mustMiss: [string, string][] = [
+    ["a different word for the same thing", "Erwerbspreis CHF 900'000.00"],
+    ["a label in another language", "Prix d'achat CHF 900'000.00"],
+    ["no extractable text, as from a scan", ""],
+  ];
+  for (const [what, text] of mustMiss) {
+    test(`returns null rather than a guess: ${what}`, () => {
+      assert.equal(after(text, /Kaufpreis/), null);
+    });
+  }
 }
 
 console.log(`\n${passed} passed, ${failed} failed\n`);

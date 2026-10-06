@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/*
+ * Status colors are the validated fixed status palette: good / warning /
+ * serious / critical. They are used only as marks — a chip, a dot, a meter
+ * fill. Labels and figures stay in ink, because `good` and `warning` sit below
+ * 4.5:1 on a light surface and must never carry meaning on their own. Every
+ * status in the UI is therefore colour plus an icon plus a word.
+ */
+@theme {
+  --color-surface: #fcfcfb;
+  --color-canvas: #f3f3f1;
+  --color-ink: #0b0b0b;
+  --color-ink-2: #52514e;
+  --color-ink-3: #7c7b76;
+  --color-line: #e2e2dd;
+
+  --color-good: #0ca30c;
+  --color-warning: #fab219;
+  --color-serious: #ec835a;
+  --color-critical: #d03b3b;
+
+  /* Meter tracks: the same hue as the fill, stepped light. */
+  --color-good-track: #d8efd8;
+  --color-critical-track: #f6dada;
+
+  --color-accent: #2a78d6;
+  --color-accent-soft: #eaf1fb;
+
+  /*
+   * The financing split is three parts of one whole — your cash, your pension
+   * money, the bank's money — so it is stepped from a single hue rather than
+   * given three competing colours. Each segment is directly labelled, so
+   * identity never rests on the colour.
+   */
+  --color-own: #1f4e9c;
+  --color-pension: #7ba5db;
+  --color-bank: #dbe5f3;
+}
+
+html {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* Figures must line up in columns, so they get tabular numerals. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hairline rules, one shade off the surface. Never dashed. */
+.rule {
+  border-color: var(--color-line);
+}

@@ -1,0 +1,389 @@
+"use client";
+
+/**
+ * Can this buyer get this mortgage?
+ *
+ * The page is written for the person buying the home, not the bank. It leads
+ * with the answer in one line, then a dial they can move to find out what it
+ * would take, and only then the bank's own paperwork — the arithmetic, the
+ * document findings, the Kreditantrag — folded away for whoever needs it.
+ */
+
+import { useCallback, useMemo, useState } from "react";
+import {
+  ArithmeticDisclosure,
+  ChecksSummary,
+  Completeness,
+  FindingsList,
+} from "@/components/ChecksPanel";
+import { DecisionCard } from "@/components/DecisionCard";
+import { Dropzone } from "@/components/Dropzone";
+import { ExtractedTable, type EditableField } from "@/components/ExtractedTable";
+import { FixesPanel } from "@/components/FixesPanel";
+import { KreditantragView } from "@/components/KreditantragView";
+import { Simulator } from "@/components/Simulator";
+import { Disclosure, Section } from "@/components/ui";
+import { fmt, pct } from "@/lib/rules";
+import type { AnalysisResult, ExtractedDossier, RuleInput } from "@/lib/types";
+
+export default function Page() {
+  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState<string | null>(null);
+  const [signedOff, setSignedOff] = useState<"approved" | "rejected" | null>(null);
+
+  const run = useCallback(async (fn: () => Promise<Response>, stageLabel: string) => {
+    setBusy(true);
+    setStage(stageLabel);
+    setError(null);
+    try {
+      const response = await fn();
+      const data = (await response.json()) as AnalysisResult | { error: string };
+      if (!response.ok || "error" in data) {
+        setError("error" in data ? data.error : "The check could not be completed.");
+        return;
+      }
+      setResult(data);
+      setSignedOff(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "The check could not be completed.");
+    } finally {
+      setBusy(false);
+      setStage(null);
+    }
+  }, []);
+
+  const onFiles = useCallback(
+    (files: File[]) => {
+      const body = new FormData();
+      for (const f of files) body.append("files", f);
+      void run(
+        () => fetch("/api/analyze", { method: "POST", body }),
+        `Reading your ${files.length} documents…`,
+      );
+    },
+    [run],
+  );
+
+  const onSample = useCallback(
+    (id: string) => {
+      void run(
+        () =>
+          fetch("/api/sample", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          }),
+        "Reading the documents…",
+      );
+    },
+    [run],
+  );
+
+  const onEdit = useCallback(
+    (field: EditableField, value: number) => {
+      if (!result) return;
+      void run(
+        () =>
+          fetch("/api/reassess", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ extracted: applyEdit(result.extracted, field, value) }),
+          }),
+        "Recalculating…",
+      );
+    },
+    [result, run],
+  );
+
+  const onRedraft = useCallback(() => {
+    if (!result) return;
+    void run(
+      () =>
+        fetch("/api/reassess", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ extracted: result.extracted, redraft: true }),
+        }),
+      "Writing the credit proposal…",
+    );
+  }, [result, run]);
+
+  const documented: RuleInput | null = useMemo(() => {
+    if (!result) return null;
+    const a = result.assessment;
+    return {
+      purchasePrice: a.purchasePrice,
+      bankValuation:
+        a.valuation < a.purchasePrice ? a.valuation : undefined,
+      grossIncome: a.grossIncome,
+      hardEquity: a.hardEquity,
+      pensionEquity: a.pensionEquity,
+    };
+  }, [result]);
+
+  // ---------------------------------------------------------------- landing
+  if (!result) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-6 py-16">
+        <div>
+          <h1 className="text-[32px] leading-tight font-semibold tracking-tight text-ink">
+            Can you get this mortgage?
+          </h1>
+          <p className="mt-3 text-[15px] leading-relaxed text-ink-2">
+            Upload the documents your bank asks for. You will get a straight answer
+            against the Swiss lending rules, and the numbers behind it.
+          </p>
+
+          <div className="mt-8">
+            <Dropzone
+              onFiles={onFiles}
+              onSample={onSample}
+              busy={busy}
+              stage={stage}
+            />
+          </div>
+
+          {error && (
+            <div role="alert" className="mt-6 rounded-lg bg-canvas px-4 py-3">
+              <p className="text-[13px] font-medium text-ink">
+                That did not work
+              </p>
+              <p className="mt-0.5 text-[13px] text-ink-2">{error}</p>
+            </div>
+          )}
+
+          {!busy && !error && (
+            <Disclosure summary="Which documents?" hint="seven">
+              <ul className="space-y-1.5 text-[13px] text-ink-2">
+                <li>The mortgage application form (Hypothekarantrag)</li>
+                <li>Your salary certificate (Lohnausweis)</li>
+                <li>Your tax return summary (Steuererklärung)</li>
+                <li>A debt register extract (Betreibungsregisterauszug)</li>
+                <li>Your pension fund statement (Vorsorgeausweis)</li>
+                <li>A bank statement of your assets (Vermögensausweis)</li>
+                <li>The property sales documentation (Verkaufsdokumentation)</li>
+              </ul>
+            </Disclosure>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  // ---------------------------------------------------------------- result
+  const a = result.assessment;
+  const good = a.passed;
+
+  return (
+    <main className="mx-auto max-w-2xl px-6 py-12">
+      <Verdict result={result} />
+
+      {documented && (
+        <div className="mt-8">
+          <Simulator
+            documented={documented}
+            maxPension={result.extracted.pension.maxWefAvailable.value}
+          />
+        </div>
+      )}
+
+      {!good && result.fixes.length > 0 && (
+        <div className="mt-8">
+          <FixesPanel fixes={result.fixes} />
+        </div>
+      )}
+
+      <div className="mt-10 space-y-0">
+        <Section
+          title="The three checks"
+          note="As your documents read today, against the Swiss lending rules."
+        >
+          <ChecksSummary result={result} />
+        </Section>
+
+        <div className="mt-8">
+          <Disclosure
+            summary={
+              result.findings.length === 0
+                ? "Your documents agree with each other"
+                : `${result.findings.length} thing${result.findings.length === 1 ? "" : "s"} in your documents need${result.findings.length === 1 ? "s" : ""} explaining`
+            }
+            hint={result.findings.length === 0 ? "nothing to flag" : "the bank will ask"}
+            defaultOpen={result.findings.length > 0}
+          >
+            <FindingsList result={result} />
+          </Disclosure>
+
+          <ArithmeticDisclosure result={result} />
+
+          <Disclosure
+            summary="Your documents"
+            hint={`${result.extracted.documentsPresent.length} of 7`}
+          >
+            <div className="space-y-5">
+              <Completeness result={result} />
+              <ExtractedTable
+                dossier={result.extracted}
+                onEdit={onEdit}
+                busy={busy}
+              />
+            </div>
+          </Disclosure>
+
+          <Disclosure summary="For the bank" hint="credit proposal and sign-off">
+            <div className="space-y-5">
+              <DecisionCard
+                decision={result.decision}
+                signedOff={signedOff}
+                onSignOff={setSignedOff}
+              />
+              <KreditantragView
+                markdown={result.kreditantrag}
+                engine={result.draftEngine}
+                onRedraft={onRedraft}
+                busy={busy}
+              />
+            </div>
+          </Disclosure>
+        </div>
+      </div>
+
+      <footer className="mt-10 border-t border-line pt-5">
+        <button
+          type="button"
+          onClick={() => {
+            setResult(null);
+            setError(null);
+          }}
+          className="text-[13px] text-ink-2 underline decoration-line underline-offset-2 hover:text-ink"
+        >
+          Check another dossier
+        </button>
+        <p className="mt-3 text-[12px] leading-relaxed text-ink-3">
+          An indication, not an offer. The figures follow the rule sheet your bank
+          applies — 20% down payment of which 10% not from your pension, costs
+          calculated at a 5% imputed rate, and total costs at most a third of gross
+          income — but only your bank can approve a mortgage.
+        </p>
+      </footer>
+    </main>
+  );
+}
+
+/** The answer, in one line, before anything else. */
+function Verdict({ result }: { result: AnalysisResult }) {
+  const a = result.assessment;
+  const incomplete = result.missingDocuments.length > 0;
+  const failing = a.checks.filter((c) => c.status === "fail");
+
+  const headline = incomplete
+    ? "Some documents are missing"
+    : a.passed
+      ? "Yes — this mortgage works"
+      : "Not yet";
+
+  const colour = incomplete
+    ? "var(--color-serious)"
+    : a.passed
+      ? "var(--color-good)"
+      : "var(--color-critical)";
+
+  const icon = incomplete ? "?" : a.passed ? "✓" : "✕";
+
+  let detail: string;
+  if (incomplete) {
+    detail = `${result.missingDocuments.length} of the seven documents are not here: ${result.missingDocuments
+      .map((m) => m.label)
+      .join(", ")}. Add them and the check can be completed.`;
+  } else if (a.passed) {
+    detail =
+      `On a price of CHF ${fmt(a.purchasePrice)} with CHF ${fmt(a.totalEquity)} down, ` +
+      `your mortgage would be CHF ${fmt(a.mortgage)}. That costs CHF ${fmt(a.totalYearlyCost / 12)} ` +
+      `a month, which is ${pct(a.costRatio)} of your income — inside the one third limit.`;
+  } else if (failing.some((c) => c.id === "affordability") && failing.length === 1) {
+    detail =
+      `The place is affordable up to a third of your income. At CHF ${fmt(a.purchasePrice)} ` +
+      `the yearly costs come to CHF ${fmt(a.totalYearlyCost)}, which is ${pct(a.costRatio)} of ` +
+      `CHF ${fmt(a.grossIncome)}. You would need CHF ${fmt(a.requiredGrossIncome)} of income to borrow this much.`;
+  } else if (failing.some((c) => c.id === "hardEquity")) {
+    detail =
+      `Your down payment of CHF ${fmt(a.totalEquity)} is big enough overall, but only ` +
+      `CHF ${fmt(a.hardEquity)} of it is your own cash. At least 10% of the price — ` +
+      `CHF ${fmt(a.purchasePrice * 0.1)} — cannot come from your pension fund.`;
+  } else {
+    detail =
+      `Your down payment of CHF ${fmt(a.totalEquity)} is ${pct(a.equityShare)} of the price. ` +
+      `At least 20% is required, which is CHF ${fmt(a.purchasePrice * 0.2)}.`;
+  }
+
+  return (
+    <div>
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="mt-1.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[15px] font-bold text-white"
+          style={{ background: colour }}
+        >
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-[28px] leading-tight font-semibold tracking-tight text-ink">
+            {headline}
+          </h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{detail}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Write a corrected figure back into the extraction.
+ *
+ * Only the five figures the rule engine consumes are editable, so this switch
+ * is exhaustive over `EditableField` by construction.
+ */
+function applyEdit(
+  d: ExtractedDossier,
+  field: EditableField,
+  value: number,
+): ExtractedDossier {
+  const edit = <T,>(s: { value: T; document: string; label: string }, v: T) => ({
+    ...s,
+    value: v,
+    label: `${s.label} (corrected)`,
+  });
+
+  switch (field) {
+    case "price":
+      return {
+        ...d,
+        property: {
+          ...d.property,
+          priceOnApplication: edit(d.property.priceOnApplication, value),
+        },
+      };
+    case "grossIncome":
+      return {
+        ...d,
+        income: { ...d.income, grossOnLohnausweis: edit(d.income.grossOnLohnausweis, value) },
+      };
+    case "statedIncome":
+      return {
+        ...d,
+        income: { ...d.income, statedOnApplication: edit(d.income.statedOnApplication, value) },
+      };
+    case "bankStatementTotal":
+      return {
+        ...d,
+        equity: { ...d.equity, totalOnBankStatement: edit(d.equity.totalOnBankStatement, value) },
+      };
+    case "wefRequested":
+      return {
+        ...d,
+        pension: { ...d.pension, wefRequested: edit(d.pension.wefRequested, value) },
+      };
+  }
+}
